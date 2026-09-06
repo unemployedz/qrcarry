@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>QR Tool</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="upload">Upload</button>
+      <button class="tab-btn" data-tab="scan">Scan</button>
+    </div>
+
+    <div id="upload" class="tab-content active">
+      <div class="upload-area" id="uploadArea">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <p>Tap or click to upload a QR code image</p>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+      <div id="uploadResult" class="result-box hidden">
+        <div class="result-line"><span class="label">Type:</span> <span id="resultType">-</span></div>
+        <div class="result-line"><span class="label">Issuer / Source:</span> <span id="resultIssuer">-</span></div>
+        <div class="result-line"><span class="label">Seed / Content:</span> <span id="resultSeed" class="mono">-</span></div>
+      </div>
+    </div>
+
+    <div id="scan" class="tab-content">
+      <div class="scan-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="scanOverlay" class="scan-overlay"></canvas>
+        <div id="scanStatus">Point camera at QR code</div>
+      </div>
+      <div id="scanResult" class="result-box hidden">
+        <div class="result-line"><span class="label">Type:</span> <span id="scanType">-</span></div>
+        <div class="result-line"><span class="label">Issuer / Source:</span> <span id="scanIssuer">-</span></div>
+        <div class="result-line"><span class="label">Seed / Content:</span> <span id="scanSeed" class="mono">-</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
