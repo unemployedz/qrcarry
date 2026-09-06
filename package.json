@@ -1,6 +1,6 @@
 {
   "name": "qrcarry",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "description": "QR Carry web service with robust QR decoding and a compatibility web proxy",
   "scripts": {
@@ -12,6 +12,9 @@
   "dependencies": {
     "@zxing/library": "^0.23.0",
     "busboy": "^1.6.0",
-    "sharp": "^0.34.5"
+    "heic-convert": "^2.1.0",
+    "jsqr": "^1.4.0",
+    "sharp": "^0.34.5",
+    "ws": "^8.18.3"
   }
 }
