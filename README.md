@@ -1,5 +1,7 @@
 # QR Carry
 
+![QR Carry](./assets/qrcarry-banner.svg)
+
 A clean, mobile-first QR decoder and scanner that runs as a Node.js Web Service.
 
 QR Carry decodes QR images locally in the browser when possible, with a server fallback for difficult images. It also supports live camera scanning and app-aware link handling for QR codes such as Roblox deep links.
@@ -36,7 +38,6 @@ Use these settings:
 | Runtime | Node |
 | Build Command | `npm install` |
 | Start Command | `npm start` |
-|
 
 No database or environment variables are required for the basic deployment.
 
@@ -111,6 +112,8 @@ qrcarry/
 ├── server.js
 ├── package.json
 ├── render.yaml
+├── assets/
+│   └── qrcarry-banner.svg
 └── README.md
 ```
 
