@@ -1,4 +1,5 @@
 (function() {
+  // DOM refs
   const tabs = document.querySelectorAll('.tab-btn');
   const contents = {
     upload: document.getElementById('upload'),
@@ -7,33 +8,26 @@
   const fileInput = document.getElementById('fileInput');
   const uploadArea = document.getElementById('uploadArea');
   const uploadResult = document.getElementById('uploadResult');
-  const resultBadge = document.getElementById('resultBadge');
-  const resultOrigin = document.getElementById('resultOrigin');
+  const resultType = document.getElementById('resultType');
+  const resultIssuer = document.getElementById('resultIssuer');
   const resultSeed = document.getElementById('resultSeed');
-  const resultFull = document.getElementById('resultFull');
-  const copyBtn = document.getElementById('copyBtn');
-  const copyStatus = document.getElementById('copyStatus');
 
   const video = document.getElementById('video');
   const scanOverlay = document.getElementById('scanOverlay');
   const scanStatus = document.getElementById('scanStatus');
   const scanResult = document.getElementById('scanResult');
-  const scanBadge = document.getElementById('scanBadge');
-  const scanOrigin = document.getElementById('scanOrigin');
+  const scanType = document.getElementById('scanType');
+  const scanIssuer = document.getElementById('scanIssuer');
   const scanSeed = document.getElementById('scanSeed');
-  const scanFull = document.getElementById('scanFull');
-  const scanCopyBtn = document.getElementById('scanCopyBtn');
-  const scanCopyStatus = document.getElementById('scanCopyStatus');
 
   let activeTab = 'upload';
   let scanStream = null;
   let scanFrameId = null;
   let scanDecodeTimer = null;
-  let lastCopiedSeed = null;
 
   // Tab switching
   tabs.forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function(e) {
       const tab = this.dataset.tab;
       if (tab === activeTab) return;
       tabs.forEach(b => b.classList.remove('active'));
@@ -47,22 +41,40 @@
     });
   });
 
-  // Upload
-  uploadArea.addEventListener('click', () => fileInput.click());
+  // Upload: direct file input trigger - fixed
+  uploadArea.addEventListener('click', function(e) {
+    // Don't trigger if click came from the file input itself
+    if (e.target === fileInput) return;
+    fileInput.click();
+  });
+
+  // Also allow clicking the file input directly
+  fileInput.addEventListener('click', function(e) {
+    e.stopPropagation();
+  });
+
   fileInput.addEventListener('change', handleFile);
 
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = function(ev) {
       const img = new Image();
       img.onload = function() {
         decodeQRFromImage(img);
       };
+      img.onerror = function() {
+        showUploadResult(null, 'Failed to load image.');
+      };
       img.src = ev.target.result;
     };
+    reader.onerror = function() {
+      showUploadResult(null, 'Failed to read file.');
+    };
     reader.readAsDataURL(file);
+    // Reset so same file can be re-uploaded
     fileInput.value = '';
   }
 
@@ -74,76 +86,36 @@
     canvas.height = size;
     ctx.drawImage(img, 0, 0, size, size);
     const imageData = ctx.getImageData(0, 0, size, size);
+
     let code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'dontInvert',
+      inversionAttempts: 'attemptBoth',
     });
+
     if (code && code.data) {
       showUploadResult(code.data);
     } else {
-      code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth',
-      });
-      if (code && code.data) {
-        showUploadResult(code.data);
-      } else {
-        showUploadResult(null, 'No QR code found');
-      }
+      showUploadResult(null, 'No QR code found in the image.');
     }
   }
 
   function showUploadResult(data, error) {
     uploadResult.classList.remove('hidden');
     if (error) {
-      resultBadge.textContent = 'Error';
-      resultBadge.className = 'result-badge text';
-      resultOrigin.textContent = '-';
+      resultType.textContent = 'Error';
+      resultIssuer.textContent = '-';
       resultSeed.textContent = error;
-      resultSeed.style.color = '#f55';
-      resultFull.textContent = '';
-      copyBtn.disabled = true;
+      resultSeed.style.color = '#ff4444';
       return;
     }
     const parsed = parseQRData(data);
-    resultBadge.textContent = parsed.badge;
-    resultBadge.className = 'result-badge ' + parsed.badgeClass;
-    resultOrigin.textContent = parsed.origin;
-    resultSeed.textContent = parsed.seed;
-    resultSeed.style.color = '#0f0';
-    resultFull.textContent = parsed.raw;
-    copyBtn.disabled = false;
-    copyStatus.classList.add('hidden');
-    lastCopiedSeed = parsed.seed;
+    resultType.textContent = parsed.type;
+    resultIssuer.textContent = parsed.issuer || '-';
+    resultSeed.textContent = parsed.seed || parsed.raw;
+    resultSeed.style.color = parsed.seed ? '#0f0' : '#fff';
   }
 
-  // Copy button (one-time)
-  function setupCopy(btn, statusEl, getSeed) {
-    btn.addEventListener('click', function() {
-      if (this.disabled) return;
-      const seed = getSeed();
-      if (!seed) return;
-      navigator.clipboard.writeText(seed).then(() => {
-        this.disabled = true;
-        statusEl.classList.remove('hidden');
-      }).catch(() => {
-        // fallback
-        const ta = document.createElement('textarea');
-        ta.value = seed;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        this.disabled = true;
-        statusEl.classList.remove('hidden');
-      });
-    });
-  }
-
-  setupCopy(copyBtn, copyStatus, () => resultSeed.textContent);
-  setupCopy(scanCopyBtn, scanCopyStatus, () => scanSeed.textContent);
-
-  // QR parser with badge/origin
+  // QR data parser
   function parseQRData(raw) {
-    // OTPAuth
     if (raw.startsWith('otpauth://')) {
       try {
         const url = new URL(raw);
@@ -152,70 +124,59 @@
         const issuerFromPath = parts.length > 1 ? parts[0] : '';
         const secret = url.searchParams.get('secret') || '';
         const issuerFromParam = url.searchParams.get('issuer') || '';
-        const issuer = issuerFromParam || issuerFromPath || 'Authenticator';
+        const issuer = issuerFromParam || issuerFromPath || 'Unknown';
         return {
-          badge: 'TOTP',
-          badgeClass: 'auth',
-          origin: issuer,
-          seed: secret.toUpperCase() || raw,
+          type: 'Authenticator (TOTP)',
+          issuer: issuer,
+          seed: secret.toUpperCase(),
           raw: raw
         };
       } catch (_) {
-        return { badge: 'OTPAuth', badgeClass: 'auth', origin: 'Malformed', seed: raw, raw };
+        return { type: 'OTPAuth URL (malformed)', issuer: '-', seed: raw, raw };
       }
     }
-    // URL
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
       try {
         const url = new URL(raw);
         return {
-          badge: 'URL',
-          badgeClass: 'url',
-          origin: url.hostname,
+          type: 'URL',
+          issuer: url.hostname,
           seed: raw,
           raw: raw
         };
       } catch (_) {
-        return { badge: 'URL', badgeClass: 'url', origin: 'Invalid', seed: raw, raw };
+        return { type: 'URL (invalid)', issuer: '-', seed: raw, raw };
       }
     }
-    // Wi-Fi
     if (raw.startsWith('WIFI:')) {
       const ssidMatch = raw.match(/S:([^;]*)/);
       const pskMatch = raw.match(/P:([^;]*)/);
-      const ssid = ssidMatch ? ssidMatch[1] : 'Unknown';
-      const psk = pskMatch ? pskMatch[1] : '(no PSK)';
+      const ssid = ssidMatch ? ssidMatch[1] : '?';
+      const psk = pskMatch ? pskMatch[1] : '?';
       return {
-        badge: 'Wi-Fi',
-        badgeClass: 'wifi',
-        origin: ssid,
+        type: 'Wi-Fi',
+        issuer: ssid,
         seed: psk,
         raw: raw
       };
     }
-    // vCard / MECARD
     if (raw.startsWith('MECARD:') || raw.startsWith('BEGIN:VCARD')) {
-      const nameMatch = raw.match(/N:([^;]*)/) || raw.match(/FN:([^;]*)/);
-      const name = nameMatch ? nameMatch[1] : 'Contact';
       return {
-        badge: 'Contact',
-        badgeClass: 'contact',
-        origin: name,
-        seed: raw.substring(0, 64) + (raw.length > 64 ? '...' : ''),
+        type: 'Contact',
+        issuer: 'vCard',
+        seed: raw.substring(0, 80) + (raw.length > 80 ? '...' : ''),
         raw: raw
       };
     }
-    // Plain text
     return {
-      badge: 'Text',
-      badgeClass: 'text',
-      origin: 'Plain',
-      seed: raw.length > 80 ? raw.substring(0, 80) + '...' : raw,
+      type: 'Text / Other',
+      issuer: '-',
+      seed: raw,
       raw: raw
     };
   }
 
-  // Scan
+  // Scan tab
   async function startScan() {
     if (scanStream) return;
     try {
@@ -233,9 +194,18 @@
   }
 
   function stopScan() {
-    if (scanFrameId) { cancelAnimationFrame(scanFrameId); scanFrameId = null; }
-    if (scanDecodeTimer) { clearTimeout(scanDecodeTimer); scanDecodeTimer = null; }
-    if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    if (scanFrameId) {
+      cancelAnimationFrame(scanFrameId);
+      scanFrameId = null;
+    }
+    if (scanDecodeTimer) {
+      clearTimeout(scanDecodeTimer);
+      scanDecodeTimer = null;
+    }
+    if (scanStream) {
+      scanStream.getTracks().forEach(t => t.stop());
+      scanStream = null;
+    }
     video.srcObject = null;
     scanStatus.textContent = 'Camera stopped';
     const ctx = scanOverlay.getContext('2d');
@@ -245,6 +215,7 @@
   function scanDecodeLoop() {
     if (!scanStream) return;
     scanFrameId = requestAnimationFrame(scanDecodeLoop);
+
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -280,7 +251,10 @@
         }, 300);
       }
     } else {
-      if (scanDecodeTimer) { clearTimeout(scanDecodeTimer); scanDecodeTimer = null; }
+      if (scanDecodeTimer) {
+        clearTimeout(scanDecodeTimer);
+        scanDecodeTimer = null;
+      }
       scanStatus.textContent = 'Scanning...';
     }
   }
@@ -288,18 +262,19 @@
   function showScanResult(data) {
     const parsed = parseQRData(data);
     scanResult.classList.remove('hidden');
-    scanBadge.textContent = parsed.badge;
-    scanBadge.className = 'result-badge ' + parsed.badgeClass;
-    scanOrigin.textContent = parsed.origin;
-    scanSeed.textContent = parsed.seed;
-    scanSeed.style.color = '#0f0';
-    scanFull.textContent = parsed.raw;
-    scanCopyBtn.disabled = false;
-    scanCopyStatus.classList.add('hidden');
+    scanType.textContent = parsed.type;
+    scanIssuer.textContent = parsed.issuer || '-';
+    scanSeed.textContent = parsed.seed || parsed.raw;
+    scanSeed.style.color = parsed.seed ? '#0f0' : '#fff';
     scanStatus.textContent = 'Decoded';
     if (navigator.vibrate) navigator.vibrate(30);
   }
 
-  window.addEventListener('beforeunload', stopScan);
-  if (document.querySelector('#scan.active')) startScan();
+  window.addEventListener('beforeunload', () => {
+    stopScan();
+  });
+
+  if (document.querySelector('#scan.active')) {
+    startScan();
+  }
 })();
