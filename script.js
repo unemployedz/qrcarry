@@ -36,64 +36,64 @@
   fileInput.addEventListener('change',()=>{const f=fileInput.files?.[0];if(f)decodeFile(f);fileInput.value=''});
 
   async function fileToUsableBlob(file){
-    const name=(file.name||'').toLowerCase();
-    const type=(file.type||'').toLowerCase();
+    const name=(file.name||'').toLowerCase(),type=(file.type||'').toLowerCase();
     const heic=type.includes('heic')||type.includes('heif')||/\.(heic|heif)$/.test(name);
-    if(heic){
-      if(typeof window.heic2any!=='function') throw new Error('HEIC support library did not load.');
-      const converted=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.95});
-      return Array.isArray(converted)?converted[0]:converted;
+    if(heic&&typeof window.heic2any==='function'){
+      try{const converted=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.95});return Array.isArray(converted)?converted[0]:converted;}catch{}
     }
     return file;
   }
 
   async function imageToCanvas(blob){
-    const img=new Image();
-    const objectUrl=URL.createObjectURL(blob);
+    const img=new Image(),objectUrl=URL.createObjectURL(blob);
     try{
-      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('The selected image could not be decoded by Safari.'));img.src=objectUrl;});
+      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('The browser could not open this image.'));img.src=objectUrl;});
       const max=2400,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
       const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
-      const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,canvas.width,canvas.height);return canvas;
+      canvas.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,canvas.width,canvas.height);return canvas;
     }finally{URL.revokeObjectURL(objectUrl)}
   }
 
   async function decodeWithZXing(blob){
-    if(!window.ZXing?.BrowserQRCodeReader) return null;
+    if(!window.ZXing?.BrowserQRCodeReader)return null;
+    const url=URL.createObjectURL(blob);
     try{
       const reader=new window.ZXing.BrowserQRCodeReader();
-      const url=URL.createObjectURL(blob);
-      try{const result=await reader.decodeFromImageUrl(url);return result?.text||null;}finally{URL.revokeObjectURL(url);try{reader.reset()}catch{}}
-    }catch{return null;}
+      const result=await reader.decodeFromImageUrl(url);
+      return result?.getText?.()||result?.text||null;
+    }catch{return null;}finally{URL.revokeObjectURL(url);}
   }
 
   function decodeCanvas(canvas){
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});
-    const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}),image=ctx.getImageData(0,0,canvas.width,canvas.height);
     const attempts=[image];
-    if(canvas.width>900){
-      const small=document.createElement('canvas');const ratio=900/canvas.width;small.width=900;small.height=Math.round(canvas.height*ratio);small.getContext('2d').drawImage(canvas,0,0,small.width,small.height);attempts.push(small.getContext('2d',{willReadFrequently:true}).getImageData(0,0,small.width,small.height));
-    }
-    for(const frame of attempts){
-      for(const inversionAttempts of ['attemptBoth','dontInvert']){
-        const code=window.jsQR?.(frame.data,frame.width,frame.height,{inversionAttempts});if(code?.data)return code.data;
-      }
-    }
+    if(canvas.width>1400){const small=document.createElement('canvas'),ratio=1400/canvas.width;small.width=1400;small.height=Math.round(canvas.height*ratio);small.getContext('2d').drawImage(canvas,0,0,small.width,small.height);attempts.push(small.getContext('2d',{willReadFrequently:true}).getImageData(0,0,small.width,small.height));}
+    for(const frame of attempts)for(const inversionAttempts of ['attemptBoth','dontInvert']){try{const code=window.jsQR?.(frame.data,frame.width,frame.height,{inversionAttempts,greyScaleWeights:{red:0.299,green:0.587,blue:0.114}});if(code?.data)return code.data;}catch{}}
     return null;
+  }
+
+  async function decodeOnServer(file){
+    const form=new FormData();form.append('file',file,file.name||'qrcode');
+    const response=await fetch('/api/decode',{method:'POST',body:form,headers:{'accept':'application/json'}});
+    let payload={};try{payload=await response.json();}catch{}
+    if(!response.ok)throw new Error(payload.error||'The server could not decode this image.');
+    return payload.data||null;
   }
 
   async function decodeFile(file){
     if(!file)return;
-    $('uploadResult').classList.add('hidden');
-    $('uploadStatus').textContent='Preparing image…';
+    $('uploadResult').classList.add('hidden');$('uploadStatus').textContent='Preparing image…';
     try{
       const blob=await fileToUsableBlob(file);
-      $('uploadStatus').textContent='Decoding locally…';
+      $('uploadStatus').textContent='Trying local decoders…';
       let data=await decodeWithZXing(blob);
       if(!data){const canvas=await imageToCanvas(blob);data=decodeCanvas(canvas);}
-      if(!data){$('uploadStatus').textContent='No QR code found.';renderResult('result','','No QR code was detected. Try the original photo, a closer crop, or a sharper QR image.');return;}
+      if(data){$('uploadStatus').textContent='Decoded locally.';renderResult('result',data);return;}
+      $('uploadStatus').textContent='Local decode missed it. Using server decoder…';
+      data=await decodeOnServer(file);
+      if(!data)throw new Error('No QR code could be detected.');
       $('uploadStatus').textContent='Decoded successfully.';renderResult('result',data);
-    }catch(err){console.error(err);$('uploadStatus').textContent='Decode failed.';renderResult('result','',err?.message||'Unable to read this image.');}
+    }catch(err){console.error(err);$('uploadStatus').textContent='Decode failed.';renderResult('result','',err?.message||'Unable to decode this image.');}
   }
 
   async function startScan(){if(state.stream)return;if(!navigator.mediaDevices?.getUserMedia){$('scanStatus').textContent='Camera is not supported in this browser.';return;}$('scanStatus').textContent='Requesting camera…';try{state.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});$('video').srcObject=state.stream;await $('video').play();$('cameraBtn').textContent='Stop camera';$('scanStatus').textContent='Point your camera at a QR code';scanLoop();}catch(err){state.stream=null;$('cameraBtn').textContent='Start camera';$('scanStatus').textContent=err.name==='NotAllowedError'?'Camera permission was denied.':'Camera unavailable.';}}
@@ -104,7 +104,7 @@
   $('clearBtn').addEventListener('click',()=>{$('uploadResult').classList.add('hidden');$('scanResult').classList.add('hidden');$('uploadStatus').textContent='Ready to decode';state.lastData='';resetBrowser();});
 
   const frame=$('browserFrame'),empty=$('browserEmpty'),urlInput=$('browserUrl'),message=$('browserMessage'),external=$('openExternal');
-  function normalizeUrl(value){let v=String(value||'').trim();if(!v)return'';if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(v))v='https://'+v;try{const u=new URL(v);if(!['http:','https:'].includes(u.protocol))return'';return u.href;}catch{return'';}}
+  function normalizeUrl(value){let v=String(value||'').trim();if(!v)return'';if(!/^[a-z][a-z0-9+.-]*:\/\//i.test(v))v='https://'+v;try{const u=new URL(v);if(!['http:','https:'].includes(u.protocol))return'';if(u.hostname.toLowerCase()==='roblox.com')u.hostname='www.roblox.com';return u.href;}catch{return'';}}
   function proxyUrl(target){return '/api/proxy?url='+encodeURIComponent(target);}
   function showBrowserError(url,detail){frame.style.display='none';empty.style.display='flex';$('browserTitle').textContent='Could not load site';message.textContent=detail||'The destination could not be rendered through the compatibility proxy.';external.classList.remove('hidden');external.onclick=()=>window.open(url,'_blank','noopener,noreferrer');}
   function navigate(value,push=true){const url=normalizeUrl(value);if(!url){message.textContent='Enter a valid http:// or https:// address.';return;}if(push){state.history=state.history.slice(0,state.historyIndex+1);state.history.push(url);state.historyIndex++;}urlInput.value=url;external.classList.add('hidden');$('browserTitle').textContent='Loading';message.textContent='Fetching '+new URL(url).hostname+'…';empty.style.display='flex';frame.style.display='block';frame.src=proxyUrl(url);}
