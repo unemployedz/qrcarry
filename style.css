@@ -29,17 +29,17 @@ html, body {
 .tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   flex-shrink: 0;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 12px 0;
+  padding: 10px 0;
   background: #1a1a1a;
   border: 1px solid #333;
   color: #888;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
@@ -69,15 +69,15 @@ html, body {
 }
 
 .upload-area {
-  flex: 1;
-  min-height: 200px;
+  flex: 0 0 auto;
+  height: 180px;
   border: 2px dashed #333;
-  border-radius: 16px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 16px;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
   touch-action: manipulation;
@@ -90,15 +90,15 @@ html, body {
 }
 
 .upload-icon {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   color: #555;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .upload-area p {
   color: #666;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   text-align: center;
 }
 
@@ -111,10 +111,10 @@ html, body {
 }
 
 .result-box {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 12px;
+  padding: 14px;
   background: #111;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid #222;
   flex-shrink: 0;
 }
@@ -125,9 +125,9 @@ html, body {
 
 .result-line {
   display: flex;
-  padding: 4px 0;
+  padding: 3px 0;
   gap: 8px;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   word-break: break-all;
 }
 
@@ -145,7 +145,7 @@ html, body {
 .scan-container {
   flex: 1;
   position: relative;
-  min-height: 300px;
+  min-height: 250px;
   background: #0a0a0a;
   border-radius: 12px;
   overflow: hidden;
@@ -170,29 +170,32 @@ html, body {
 
 #scanStatus {
   position: absolute;
-  bottom: 16px;
+  bottom: 12px;
   left: 0;
   right: 0;
   text-align: center;
   color: #888;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   background: rgba(0,0,0,0.7);
-  padding: 8px 12px;
-  margin: 0 16px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 0 12px;
+  border-radius: 6px;
   pointer-events: none;
 }
 
 #scanResult {
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 @media (max-width: 480px) {
   #app {
     padding: 12px;
   }
+  .upload-area {
+    height: 150px;
+  }
   .result-line {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     flex-wrap: wrap;
   }
   .result-line .label {
