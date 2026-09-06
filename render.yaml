@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: qrcarry
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
