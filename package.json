@@ -1,12 +1,17 @@
 {
   "name": "qrcarry",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
-  "description": "QR Carry web service with local QR decoding and a compatibility web proxy",
+  "description": "QR Carry web service with robust QR decoding and a compatibility web proxy",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@zxing/library": "^0.23.0",
+    "busboy": "^1.6.0",
+    "sharp": "^0.34.5"
   }
 }
