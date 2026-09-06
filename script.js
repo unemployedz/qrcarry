@@ -17,11 +17,37 @@
     if(!raw)return{type:'Empty',issuer:'—',content:''};
     if(/^otpauth:\/\//i.test(raw)) { try { const u=new URL(raw), p=decodeURIComponent(u.pathname.slice(1)), issuer=u.searchParams.get('issuer')||(p.includes(':')?p.split(':')[0]:'Unknown'), secret=u.searchParams.get('secret')||''; return {type:u.hostname.toLowerCase()==='hotp'?'Authenticator (HOTP)':'Authenticator (TOTP)',issuer,content:secret.toUpperCase()||raw}; } catch {} }
     if(/^wifi:/i.test(raw)){const f={};raw.slice(5).split(';').forEach(p=>{const i=p.indexOf(':');if(i>-1)f[p.slice(0,i).toUpperCase()]=p.slice(i+1)});return{type:'Wi-Fi',issuer:f.S||'Unknown network',content:f.P||raw};}
-    if(/^(https?|ftp):\/\//i.test(raw)){try{return{type:'URL',issuer:new URL(raw).hostname,content:raw};}catch{}}
+    if(/^(https?|ftp):\/\//i.test(raw)){try{return{type:'URL',issuer:new URL(raw).hostname,content:raw};}catch{return{type:'URL',issuer:'Link',content:raw};}}
+    if(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)){try{return{type:'App / Deep Link',issuer:new URL(raw).protocol.replace(':',''),content:raw};}catch{return{type:'App / Deep Link',issuer:'Custom scheme',content:raw};}}
     if(/^(BEGIN:VCARD|MECARD:)/i.test(raw))return{type:'Contact',issuer:'vCard',content:raw};
     if(/^mailto:/i.test(raw))return{type:'Email',issuer:'Mail',content:raw};
     if(/^tel:/i.test(raw))return{type:'Phone',issuer:'Telephone',content:raw};
     return{type:'Text / Other',issuer:'QR data',content:raw};
+  }
+
+  function robloxAppTarget(raw) {
+    try {
+      const u = new URL(raw);
+      if (!/(^|\.)ro\.blox\.com$/i.test(u.hostname)) return null;
+      const direct = u.searchParams.get('af_dp');
+      if (!direct) return null;
+      const decoded = decodeURIComponent(direct);
+      return /^roblox:|^robloxmobile:/i.test(decoded) ? decoded : null;
+    } catch { return null; }
+  }
+
+  function isLink(value) {
+    return /^(https?|ftp|mailto|tel|[a-z][a-z0-9+.-]*):/i.test(String(value||''));
+  }
+
+  function openTarget(raw) {
+    const value = String(raw||'').trim();
+    if (!value) return;
+    const appTarget = robloxAppTarget(value);
+    if (appTarget) { window.location.href = appTarget; return; }
+    // A normal anchor navigation is intentional here: iOS can apply Universal Links
+    // only when the original user gesture reaches the real HTTPS destination.
+    window.location.href = value;
   }
 
   function renderResult(kind,data,error='') {
@@ -31,7 +57,12 @@
     if(error){$(ids.type).textContent='Could not decode';$(ids.issuer).textContent='Error';$(ids.seed).textContent=error;return;}
     const p=parseQRData(data);$(ids.type).textContent=p.type;$(ids.issuer).textContent=p.issuer||'—';$(ids.seed).textContent=p.content||'—';
     const btn=$(ids.copy);btn.onclick=()=>copy(p.content,btn);
-    if(/^(https?|ftp):\/\//i.test(p.content)){open.classList.remove('hidden');open.onclick=()=>window.open(p.content,'_blank','noopener,noreferrer');}
+    if(isLink(p.content)){
+      open.classList.remove('hidden');
+      const appTarget=robloxAppTarget(p.content);
+      open.textContent=appTarget?'Open in Roblox':'Open link';
+      open.onclick=()=>openTarget(p.content);
+    }
   }
 
   tabs.forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
@@ -60,9 +91,7 @@
 
   function decodeCanvas(canvas){
     if(!window.jsQR)return null;
-    const frames=[];
-    const add=c=>{const ctx=c.getContext('2d',{willReadFrequently:true});frames.push(ctx.getImageData(0,0,c.width,c.height));};
-    add(canvas);
+    const frames=[];const add=c=>{const ctx=c.getContext('2d',{willReadFrequently:true});frames.push(ctx.getImageData(0,0,c.width,c.height));};add(canvas);
     if(canvas.width>1600){const c=document.createElement('canvas'),s=1600/canvas.width;c.width=1600;c.height=Math.round(canvas.height*s);c.getContext('2d').drawImage(canvas,0,0,c.width,c.height);add(c)}
     for(const frame of frames) for(const inversionAttempts of ['attemptBoth','dontInvert','onlyInvert']) for(const weights of [{red:.299,green:.587,blue:.114},{red:.2126,green:.7152,blue:.0722}]) {try{const r=jsQR(frame.data,frame.width,frame.height,{inversionAttempts,greyScaleWeights:weights});if(r?.data)return r.data}catch{}}
     return null;
@@ -70,27 +99,8 @@
 
   async function decodeWithZXing(blob){
     if(!window.ZXing?.BrowserQRCodeReader)return null;const url=URL.createObjectURL(blob);try{const reader=new ZXing.BrowserQRCodeReader();const r=await reader.decodeFromImageUrl(url);return r?.getText?.()||r?.text||null}catch{return null}finally{URL.revokeObjectURL(url)}}
-
-  async function decodeOnServer(file){
-    const form=new FormData();form.append('file',file,file.name||'qrcode');
-    const r=await fetch('/api/decode',{method:'POST',body:form,headers:{accept:'application/json'}});let p={};try{p=await r.json()}catch{}
-    if(!r.ok)throw new Error(p.error||`Server decoder returned HTTP ${r.status}`);return p.data||null;
-  }
-
-  async function decodeFile(file){
-    if(!file)return;$('uploadResult').classList.add('hidden');$('uploadStatus').textContent='Preparing image…';
-    try{
-      const blob=await fileToUsableBlob(file);let data=null;
-      $('uploadStatus').textContent='Trying QR decoders…';
-      data=await decodeWithZXing(blob);
-      if(!data){const canvas=await imageToCanvas(blob);data=decodeCanvas(canvas)}
-      if(data){$('uploadStatus').textContent='Decoded successfully.';renderResult('upload',data);return}
-      $('uploadStatus').textContent='Using secure server decoder…';
-      data=await decodeOnServer(file);
-      if(!data)throw new Error('No QR code was detected.');
-      $('uploadStatus').textContent='Decoded successfully.';renderResult('upload',data);
-    }catch(err){console.error('QR decode:',err);$('uploadStatus').textContent='Decode failed — '+(err?.message||'unknown error');renderResult('upload','',err?.message||'Unable to decode this image.')}
-  }
+  async function decodeOnServer(file){const form=new FormData();form.append('file',file,file.name||'qrcode');const r=await fetch('/api/decode',{method:'POST',body:form,headers:{accept:'application/json'}});let p={};try{p=await r.json()}catch{}if(!r.ok)throw new Error(p.error||`Server decoder returned HTTP ${r.status}`);return p.data||null;}
+  async function decodeFile(file){if(!file)return;$('uploadResult').classList.add('hidden');$('uploadStatus').textContent='Preparing image…';try{const blob=await fileToUsableBlob(file);let data=null;$('uploadStatus').textContent='Trying QR decoders…';data=await decodeWithZXing(blob);if(!data){const canvas=await imageToCanvas(blob);data=decodeCanvas(canvas)}if(data){$('uploadStatus').textContent='Decoded successfully.';renderResult('upload',data);return}$('uploadStatus').textContent='Using secure server decoder…';data=await decodeOnServer(file);if(!data)throw new Error('No QR code was detected.');$('uploadStatus').textContent='Decoded successfully.';renderResult('upload',data)}catch(err){console.error('QR decode:',err);$('uploadStatus').textContent='Decode failed — '+(err?.message||'unknown error');renderResult('upload','',err?.message||'Unable to decode this image.')}}
 
   async function startScan(){if(state.stream)return;if(!navigator.mediaDevices?.getUserMedia){$('scanStatus').textContent='Camera is not supported here.';return}$('scanStatus').textContent='Requesting camera…';try{state.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});$('video').srcObject=state.stream;await $('video').play();$('cameraBtn').textContent='Stop camera';$('scanStatus').textContent='Point your camera at a QR code';scanLoop()}catch(e){state.stream=null;$('cameraBtn').textContent='Start camera';$('scanStatus').textContent=e.name==='NotAllowedError'?'Camera permission was denied.':'Camera unavailable.'}}
   function stopScan(){if(state.raf)cancelAnimationFrame(state.raf);state.raf=0;state.stream?.getTracks().forEach(t=>t.stop());state.stream=null;const v=$('video');v.pause();v.srcObject=null;$('cameraBtn').textContent='Start camera'}
