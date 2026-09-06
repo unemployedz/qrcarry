@@ -11,77 +11,32 @@
 <body>
   <main id="app">
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-        <div><strong>QR Carry</strong><small>Private QR utilities</small></div>
-      </div>
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div><div><strong>QR Carry</strong><small>Private QR utilities</small></div></div>
       <button id="clearBtn" class="icon-btn" type="button" aria-label="Clear current result" title="Clear">×</button>
     </header>
+    <nav class="tabs" aria-label="Tools"><button class="tab-btn active" data-tab="upload" type="button">Decode</button><button class="tab-btn" data-tab="scan" type="button">Scan</button><button class="tab-btn" data-tab="browser" type="button">Browser</button></nav>
 
-    <nav class="tabs" aria-label="Tools">
-      <button class="tab-btn active" data-tab="upload" type="button">Decode</button>
-      <button class="tab-btn" data-tab="scan" type="button">Scan</button>
-      <button class="tab-btn" data-tab="browser" type="button">Browser</button>
-    </nav>
-
-    <section id="upload" class="tab-content active" aria-labelledby="decode-tab">
-      <div class="hero-copy">
-        <span class="eyebrow">IMAGE DECODER</span>
-        <h1>Drop a QR.<br><span>Get the data.</span></h1>
-        <p>Decode QR images locally in your browser. Nothing is uploaded.</p>
-      </div>
-
-      <label class="upload-area" id="uploadArea" for="fileInput">
-        <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*">
-        <div class="upload-grid" aria-hidden="true"></div>
-        <div class="upload-icon"><span></span><span></span><span></span><span></span></div>
-        <strong>Choose QR image</strong>
-        <p>Tap to browse or drag and drop</p>
-        <span class="upload-hint">PNG · JPG · WEBP</span>
-      </label>
+    <section id="upload" class="tab-content active">
+      <div class="hero-copy"><span class="eyebrow">IMAGE DECODER</span><h1>Drop a QR.<br><span>Get the data.</span></h1><p>Decode QR images locally in your browser. Nothing is uploaded.</p></div>
+      <label class="upload-area" id="uploadArea" for="fileInput"><input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*"><div class="upload-grid" aria-hidden="true"></div><div class="upload-icon"><span></span><span></span><span></span><span></span></div><strong>Choose QR image</strong><p>Tap to browse or drag and drop</p><span class="upload-hint">PNG · JPG · WEBP</span></label>
       <p id="uploadStatus" class="status-line" role="status">Ready to decode</p>
-
-      <div id="uploadResult" class="result-card hidden">
-        <div class="result-head"><div><span class="eyebrow">DECODED</span><h2 id="resultType">QR code</h2></div><span id="resultBadge" class="badge">LOCAL</span></div>
-        <div class="data-row"><span>Source</span><strong id="resultIssuer">—</strong></div>
-        <div class="data-row data-main"><span>Content</span><code id="resultSeed">—</code></div>
-        <div class="result-actions"><button class="copy-btn" id="resultCopyBtn" type="button">Copy content</button></div>
-      </div>
+      <div id="uploadResult" class="result-card hidden"><div class="result-head"><div><span class="eyebrow">DECODED</span><h2 id="resultType">QR code</h2></div><span class="badge">LOCAL</span></div><div class="data-row"><span>Source</span><strong id="resultIssuer">—</strong></div><div class="data-row data-main"><span>Content</span><code id="resultSeed">—</code></div><div class="result-actions"><button class="copy-btn" id="resultCopyBtn" type="button">Copy content</button></div></div>
     </section>
 
-    <section id="scan" class="tab-content" aria-labelledby="scan-tab">
-      <div class="scanner-shell">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="scanOverlay" aria-hidden="true"></canvas>
-        <div class="scanner-vignette"></div>
-        <div class="scan-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span></span></div>
-        <div id="scanStatus" class="scan-status">Starting camera…</div>
-        <button id="cameraBtn" class="camera-btn" type="button">Start camera</button>
-      </div>
-      <div id="scanResult" class="result-card hidden">
-        <div class="result-head"><div><span class="eyebrow">SCANNED</span><h2 id="scanType">QR code</h2></div><span class="badge">LOCAL</span></div>
-        <div class="data-row"><span>Source</span><strong id="scanIssuer">—</strong></div>
-        <div class="data-row data-main"><span>Content</span><code id="scanSeed">—</code></div>
-        <div class="result-actions"><button class="copy-btn" id="scanCopyBtn" type="button">Copy content</button></div>
-      </div>
-    </section>
+    <section id="scan" class="tab-content"><div class="scanner-shell"><video id="video" autoplay playsinline muted></video><canvas id="scanOverlay" aria-hidden="true"></canvas><div class="scanner-vignette"></div><div class="scan-frame" aria-hidden="true"><i></i><i></i><i></i><i></i><span></span></div><div id="scanStatus" class="scan-status">Starting camera…</div><button id="cameraBtn" class="camera-btn" type="button">Start camera</button></div><div id="scanResult" class="result-card hidden"><div class="result-head"><div><span class="eyebrow">SCANNED</span><h2 id="scanType">QR code</h2></div><span class="badge">LOCAL</span></div><div class="data-row"><span>Source</span><strong id="scanIssuer">—</strong></div><div class="data-row data-main"><span>Content</span><code id="scanSeed">—</code></div><div class="result-actions"><button class="copy-btn" id="scanCopyBtn" type="button">Copy content</button></div></div></section>
 
     <section id="browser" class="tab-content browser-tab">
-      <div class="hero-copy compact"><span class="eyebrow">BROWSER VIEW</span><h1>Browse inside<br><span>QR Carry.</span></h1><p>A lightweight browser-style workspace for links you decode.</p></div>
+      <div class="hero-copy compact"><span class="eyebrow">BROWSER VIEW</span><h1>Browse inside<br><span>QR Carry.</span></h1><p>Open a link in the embedded workspace when the destination permits framing.</p></div>
       <div class="browser-window">
-        <div class="browser-toolbar">
-          <button id="browserBack" class="mini-btn" type="button" aria-label="Back">‹</button>
-          <button id="browserForward" class="mini-btn" type="button" aria-label="Forward">›</button>
-          <button id="browserReload" class="mini-btn" type="button" aria-label="Reload">↻</button>
-          <form id="browserForm" class="address-form"><span class="lock-dot">●</span><input id="browserUrl" autocomplete="off" inputmode="url" value="https://example.com" aria-label="Web address"><button type="submit">Go</button></form>
+        <div class="browser-toolbar"><button id="browserBack" class="mini-btn" type="button" aria-label="Back">‹</button><button id="browserForward" class="mini-btn" type="button" aria-label="Forward">›</button><button id="browserReload" class="mini-btn" type="button" aria-label="Reload">↻</button><form id="browserForm" class="address-form"><span class="lock-dot">●</span><input id="browserUrl" autocomplete="off" inputmode="url" value="https://example.com" aria-label="Web address"><button type="submit">Go</button></form></div>
+        <div class="browser-stage">
+          <div id="browserEmpty"><div class="empty-symbol">⌁</div><strong>Browser workspace</strong><p id="browserMessage">Enter a URL above.</p><button id="openExternal" class="external-btn hidden" type="button">Open in browser</button></div>
+          <iframe id="browserFrame" title="Browser workspace" referrerpolicy="no-referrer" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
         </div>
-        <div class="browser-stage"><div id="browserEmpty"><div class="empty-symbol">⌁</div><strong>Browser workspace</strong><p>Enter a URL above. Some sites block embedded views.</p></div><iframe id="browserFrame" title="Browser workspace" referrerpolicy="no-referrer" sandbox="allow-forms allow-modals allow-popups allow-presentation allow-scripts allow-same-origin"></iframe></div>
       </div>
     </section>
-
     <footer><span>Runs locally in your browser</span><span>·</span><span>No server required</span></footer>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script><script src="script.js"></script>
 </body>
 </html>
