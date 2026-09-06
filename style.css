@@ -22,24 +22,24 @@ html, body {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 16px 16px 20px;
+  padding: 16px;
   background: #000;
 }
 
 .tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-shrink: 0;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 10px 0;
+  padding: 12px 0;
   background: #1a1a1a;
   border: 1px solid #333;
   color: #888;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
@@ -69,20 +69,19 @@ html, body {
 }
 
 .upload-area {
-  flex-shrink: 0;
-  height: 140px;
+  flex: 1;
+  min-height: 200px;
   border: 2px dashed #333;
-  border-radius: 12px;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 24px;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
   touch-action: manipulation;
   position: relative;
-  background: #0a0a0a;
 }
 
 .upload-area:active {
@@ -91,15 +90,16 @@ html, body {
 }
 
 .upload-icon {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   color: #555;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
 .upload-area p {
   color: #666;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  text-align: center;
 }
 
 .upload-area input[type="file"] {
@@ -110,114 +110,63 @@ html, body {
   touch-action: manipulation;
 }
 
-.result-panel {
+.result-box {
   margin-top: 16px;
-  background: #0e0e0e;
-  border: 1px solid #222;
+  padding: 16px;
+  background: #111;
   border-radius: 12px;
-  overflow: hidden;
+  border: 1px solid #222;
   flex-shrink: 0;
 }
 
-.result-panel.hidden {
+.result-box.hidden {
   display: none;
 }
 
-.result-header {
+.result-line {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #141414;
-  border-bottom: 1px solid #222;
-}
-
-.result-badge {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 2px 10px;
-  border-radius: 12px;
-  background: #2a2a2a;
-  color: #aaa;
-  border: 1px solid #333;
-}
-
-.result-badge.url { border-color: #2a6a9a; color: #6ab0f0; background: #0a1a2a; }
-.result-badge.auth { border-color: #6a9a2a; color: #80d040; background: #0a1a0a; }
-.result-badge.wifi { border-color: #9a7a2a; color: #e0b040; background: #1a140a; }
-.result-badge.contact { border-color: #8a4a8a; color: #d080d0; background: #1a0a1a; }
-.result-badge.text { border-color: #555; color: #aaa; background: #1a1a1a; }
-
-.result-origin {
-  font-size: 0.85rem;
-  color: #ccc;
-  font-weight: 500;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.result-body {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
+  padding: 4px 0;
   gap: 8px;
-}
-
-.result-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.result-row .label {
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #555;
-}
-
-.result-row .mono {
-  font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 0.9rem;
+  word-break: break-all;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.result-line .label {
+  color: #666;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.result-line .mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
   color: #0f0;
   word-break: break-all;
 }
 
-.result-row .mono.small {
-  font-size: 0.7rem;
-  color: #777;
-}
-
-.result-actions {
+.copy-wrapper {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px 16px;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .copy-btn {
-  background: #1a2a1a;
-  color: #80d040;
-  border: 1px solid #2a4a2a;
-  padding: 6px 18px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s;
   touch-action: manipulation;
-}
-
-.copy-btn:hover {
-  background: #1f301f;
+  transition: background 0.2s, opacity 0.2s;
 }
 
 .copy-btn:active {
-  background: #2a4a2a;
+  background: #3a3a3a;
 }
 
 .copy-btn:disabled {
@@ -226,18 +175,15 @@ html, body {
 }
 
 .copy-status {
+  color: #0f0;
   font-size: 0.75rem;
-  color: #80d040;
-}
-
-.copy-status.hidden {
-  display: none;
+  min-width: 40px;
 }
 
 .scan-container {
   flex: 1;
   position: relative;
-  min-height: 240px;
+  min-height: 300px;
   background: #0a0a0a;
   border-radius: 12px;
   overflow: hidden;
@@ -262,30 +208,37 @@ html, body {
 
 #scanStatus {
   position: absolute;
-  bottom: 12px;
+  bottom: 16px;
   left: 0;
   right: 0;
   text-align: center;
   color: #888;
-  font-size: 0.8rem;
-  background: rgba(0,0,0,0.75);
-  padding: 6px 12px;
-  margin: 0 12px;
-  border-radius: 6px;
+  font-size: 0.9rem;
+  background: rgba(0,0,0,0.7);
+  padding: 8px 12px;
+  margin: 0 16px;
+  border-radius: 8px;
   pointer-events: none;
+}
+
+#scanResult {
+  margin-top: 12px;
 }
 
 @media (max-width: 480px) {
   #app {
-    padding: 12px 12px 16px;
+    padding: 12px;
   }
-  .upload-area {
-    height: 110px;
-  }
-  .result-body {
-    padding: 10px 12px;
-  }
-  .result-row .mono {
+  .result-line {
     font-size: 0.8rem;
+    flex-wrap: wrap;
+  }
+  .result-line .label {
+    min-width: 60px;
+  }
+  .copy-wrapper {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
