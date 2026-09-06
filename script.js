@@ -1,314 +1,179 @@
-(function() {
-  // DOM refs
-  const tabs = document.querySelectorAll('.tab-btn');
-  const contents = {
-    upload: document.getElementById('upload'),
-    scan: document.getElementById('scan')
-  };
-  const fileInput = document.getElementById('fileInput');
-  const uploadArea = document.getElementById('uploadArea');
-  const uploadResult = document.getElementById('uploadResult');
-  const resultType = document.getElementById('resultType');
-  const resultIssuer = document.getElementById('resultIssuer');
-  const resultSeed = document.getElementById('resultSeed');
-  const resultCopyBtn = document.getElementById('resultCopyBtn');
-  const resultCopyStatus = document.getElementById('resultCopyStatus');
+(() => {
+  'use strict';
 
-  const video = document.getElementById('video');
-  const scanOverlay = document.getElementById('scanOverlay');
-  const scanStatus = document.getElementById('scanStatus');
-  const scanResult = document.getElementById('scanResult');
-  const scanType = document.getElementById('scanType');
-  const scanIssuer = document.getElementById('scanIssuer');
-  const scanSeed = document.getElementById('scanSeed');
-  const scanCopyBtn = document.getElementById('scanCopyBtn');
-  const scanCopyStatus = document.getElementById('scanCopyStatus');
+  const $ = (id) => document.getElementById(id);
+  const tabs = [...document.querySelectorAll('.tab-btn')];
+  const sections = ['upload', 'scan', 'browser'].reduce((o, id) => (o[id] = $(id), o), {});
+  const state = { active: 'upload', stream: null, raf: 0, lastData: '', history: [], historyIndex: -1 };
 
-  let activeTab = 'upload';
-  let scanStream = null;
-  let scanFrameId = null;
-  let scanDecodeTimer = null;
-
-  // ---- Tab switching ----
-  tabs.forEach(btn => {
-    btn.addEventListener('click', function() {
-      const tab = this.dataset.tab;
-      if (tab === activeTab) return;
-      tabs.forEach(b => b.classList.remove('active'));
-      this.classList.add('active');
-      Object.keys(contents).forEach(k => {
-        contents[k].classList.toggle('active', k === tab);
-      });
-      activeTab = tab;
-      if (tab === 'scan') startScan();
-      else stopScan();
-    });
-  });
-
-  // ---- Upload ----
-  uploadArea.addEventListener('click', function(e) {
-    if (e.target === fileInput) return;
-    fileInput.click();
-  });
-  fileInput.addEventListener('click', e => e.stopPropagation());
-  fileInput.addEventListener('change', handleFile);
-
-  function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      const img = new Image();
-      img.onload = function() { decodeQRFromImage(img); };
-      img.onerror = function() { showUploadResult(null, 'Image load failed'); };
-      img.src = ev.target.result;
-    };
-    reader.onerror = function() { showUploadResult(null, 'File read failed'); };
-    reader.readAsDataURL(file);
-    fileInput.value = '';
-  }
-
-  function decodeQRFromImage(img) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const size = 600;
-    canvas.width = size;
-    canvas.height = size;
-    ctx.drawImage(img, 0, 0, size, size);
-    const imageData = ctx.getImageData(0, 0, size, size);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'attemptBoth',
-    });
-    if (code && code.data) {
-      showUploadResult(code.data);
-    } else {
-      showUploadResult(null, 'No QR code found');
+  const copy = async (text, button) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
     }
-  }
+    const old = button.textContent;
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = old; }, 1200);
+  };
 
-  function showUploadResult(data, error) {
-    uploadResult.classList.remove('hidden');
-    // Reset copy button state
-    resultCopyBtn.disabled = false;
-    resultCopyBtn.textContent = 'Copy';
-    resultCopyStatus.textContent = '';
+  const parseQRData = (raw) => {
+    raw = String(raw || '').trim();
+    if (!raw) return { type: 'Empty', issuer: '—', content: '' };
+    if (/^otpauth:\/\//i.test(raw)) {
+      try {
+        const url = new URL(raw);
+        const path = decodeURIComponent(url.pathname.slice(1));
+        const issuerPath = path.includes(':') ? path.split(':')[0] : '';
+        const issuer = url.searchParams.get('issuer') || issuerPath || 'Unknown';
+        const secret = url.searchParams.get('secret') || '';
+        const kind = url.hostname.toLowerCase() === 'hotp' ? 'Authenticator (HOTP)' : 'Authenticator (TOTP)';
+        return { type: kind, issuer, content: secret.toUpperCase() || raw };
+      } catch { return { type: 'OTPAuth URL', issuer: 'Unknown', content: raw }; }
+    }
+    if (/^wifi:/i.test(raw)) {
+      const fields = {};
+      raw.slice(5).split(';').forEach(part => { const i = part.indexOf(':'); if (i > -1) fields[part.slice(0, i).toUpperCase()] = part.slice(i + 1); });
+      return { type: 'Wi-Fi', issuer: fields.S || 'Unknown network', content: fields.P || raw };
+    }
+    if (/^(https?|ftp):\/\//i.test(raw)) {
+      try { const url = new URL(raw); return { type: 'URL', issuer: url.hostname, content: raw }; }
+      catch { return { type: 'URL', issuer: 'Invalid URL', content: raw }; }
+    }
+    if (/^(BEGIN:VCARD|MECARD:)/i.test(raw)) return { type: 'Contact', issuer: 'vCard', content: raw };
+    if (/^mailto:/i.test(raw)) return { type: 'Email', issuer: 'Mail', content: raw };
+    if (/^tel:/i.test(raw)) return { type: 'Phone', issuer: 'Telephone', content: raw };
+    return { type: 'Text / Other', issuer: 'QR data', content: raw };
+  };
 
+  const renderResult = (prefix, data, error = '') => {
+    const box = $(prefix + 'Result');
+    box.classList.remove('hidden');
     if (error) {
-      resultType.textContent = 'Error';
-      resultIssuer.textContent = '-';
-      resultSeed.textContent = error;
-      resultSeed.style.color = '#ff4444';
-      resultCopyBtn.style.display = 'none';
+      $(prefix + 'Type').textContent = 'Could not decode';
+      $(prefix + 'Issuer').textContent = 'Error';
+      $(prefix + 'Seed').textContent = error;
       return;
     }
-    const parsed = parseQRData(data);
-    resultType.textContent = parsed.type;
-    resultIssuer.textContent = parsed.issuer || '-';
-    resultSeed.textContent = parsed.seed || parsed.raw;
-    resultSeed.style.color = '#0f0';
-    resultCopyBtn.style.display = 'inline-block';
-    // Store seed for copy
-    resultCopyBtn.dataset.copyText = parsed.seed || parsed.raw;
+    const p = parseQRData(data);
+    $(prefix + 'Type').textContent = p.type;
+    $(prefix + 'Issuer').textContent = p.issuer || '—';
+    $(prefix + 'Seed').textContent = p.content || '—';
+    const btn = $(prefix + 'CopyBtn');
+    btn.onclick = () => copy(p.content, btn);
+  };
+
+  tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  function switchTab(tab) {
+    if (!sections[tab] || tab === state.active) return;
+    stopScan();
+    state.active = tab;
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    Object.entries(sections).forEach(([id, el]) => el.classList.toggle('active', id === tab));
+    if (tab === 'scan') startScan();
   }
 
-  // ---- Copy handler (one‑time) ----
-  function setupCopyButton(btn, statusEl) {
-    btn.addEventListener('click', function() {
-      if (this.disabled) return;
-      const text = this.dataset.copyText;
-      if (!text) return;
-      navigator.clipboard.writeText(text).then(() => {
-        this.disabled = true;
-        this.textContent = 'Copied';
-        statusEl.textContent = '';
-      }).catch(() => {
-        // fallback
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        ta.remove();
-        this.disabled = true;
-        this.textContent = 'Copied';
-        statusEl.textContent = '';
-      });
-    });
-  }
+  const fileInput = $('fileInput');
+  const uploadArea = $('uploadArea');
+  uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragging'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragging'));
+  uploadArea.addEventListener('drop', e => { e.preventDefault(); uploadArea.classList.remove('dragging'); const file = e.dataTransfer.files[0]; if (file) decodeFile(file); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) decodeFile(fileInput.files[0]); fileInput.value = ''; });
 
-  setupCopyButton(resultCopyBtn, resultCopyStatus);
-  setupCopyButton(scanCopyBtn, scanCopyStatus);
-
-  // ---- QR data parser ----
-  function parseQRData(raw) {
-    if (raw.startsWith('otpauth://')) {
-      try {
-        const url = new URL(raw);
-        const path = url.pathname.slice(1);
-        const parts = path.split(':');
-        const issuerFromPath = parts.length > 1 ? parts[0] : '';
-        const secret = url.searchParams.get('secret') || '';
-        const issuerFromParam = url.searchParams.get('issuer') || '';
-        const issuer = issuerFromParam || issuerFromPath || 'Unknown';
-        return {
-          type: 'Authenticator (TOTP)',
-          issuer: issuer,
-          seed: secret.toUpperCase(),
-          raw: raw
-        };
-      } catch (_) {
-        return { type: 'OTPAuth URL (malformed)', issuer: '-', seed: raw, raw };
-      }
-    }
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      try {
-        const url = new URL(raw);
-        return {
-          type: 'URL',
-          issuer: url.hostname,
-          seed: raw,
-          raw: raw
-        };
-      } catch (_) {
-        return { type: 'URL (invalid)', issuer: '-', seed: raw, raw };
-      }
-    }
-    if (raw.startsWith('WIFI:')) {
-      const ssidMatch = raw.match(/S:([^;]*)/);
-      const pskMatch = raw.match(/P:([^;]*)/);
-      const ssid = ssidMatch ? ssidMatch[1] : '?';
-      const psk = pskMatch ? pskMatch[1] : '?';
-      return {
-        type: 'Wi-Fi',
-        issuer: ssid,
-        seed: psk,
-        raw: raw
+  function decodeFile(file) {
+    if (!file.type.startsWith('image/')) { renderResult('result', '', 'Please choose an image file.'); return; }
+    $('uploadStatus').textContent = 'Decoding locally…';
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const max = 1600, scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = window.jsQR?.(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+          if (!code?.data) { $('uploadStatus').textContent = 'No QR code found in that image.'; renderResult('result', '', 'No QR code found. Try a clearer or larger image.'); return; }
+          $('uploadStatus').textContent = 'Decoded successfully.';
+          renderResult('result', code.data);
+        } catch (err) { $('uploadStatus').textContent = 'Decode failed.'; renderResult('result', '', err.message || 'Unable to decode image.'); }
       };
-    }
-    if (raw.startsWith('MECARD:') || raw.startsWith('BEGIN:VCARD')) {
-      return {
-        type: 'Contact',
-        issuer: 'vCard',
-        seed: raw.substring(0, 80) + (raw.length > 80 ? '...' : ''),
-        raw: raw
-      };
-    }
-    return {
-      type: 'Text / Other',
-      issuer: '-',
-      seed: raw,
-      raw: raw
+      img.onerror = () => { $('uploadStatus').textContent = 'Image could not be opened.'; renderResult('result', '', 'Invalid or unsupported image.'); };
+      img.src = e.target.result;
     };
+    reader.onerror = () => renderResult('result', '', 'Could not read the selected file.');
+    reader.readAsDataURL(file);
   }
 
-  // ---- Scan tab ----
   async function startScan() {
-    if (scanStream) return;
+    if (state.stream) return;
+    if (!navigator.mediaDevices?.getUserMedia) { $('scanStatus').textContent = 'Camera is not supported in this browser.'; return; }
+    $('scanStatus').textContent = 'Requesting camera…';
     try {
-      scanStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
-      });
-      video.srcObject = scanStream;
-      await video.play();
-      scanStatus.textContent = 'Scanning...';
-      scanResult.classList.add('hidden');
-      // Reset copy button
-      scanCopyBtn.disabled = false;
-      scanCopyBtn.textContent = 'Copy';
-      scanCopyStatus.textContent = '';
-      scanDecodeLoop();
+      state.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      $('video').srcObject = state.stream;
+      await $('video').play();
+      $('cameraBtn').textContent = 'Stop camera';
+      $('scanStatus').textContent = 'Point your camera at a QR code';
+      scanLoop();
     } catch (err) {
-      scanStatus.textContent = 'Camera unavailable: ' + err.message;
+      state.stream = null;
+      $('cameraBtn').textContent = 'Start camera';
+      $('scanStatus').textContent = err.name === 'NotAllowedError' ? 'Camera permission was denied.' : 'Camera unavailable.';
     }
   }
 
   function stopScan() {
-    if (scanFrameId) {
-      cancelAnimationFrame(scanFrameId);
-      scanFrameId = null;
-    }
-    if (scanDecodeTimer) {
-      clearTimeout(scanDecodeTimer);
-      scanDecodeTimer = null;
-    }
-    if (scanStream) {
-      scanStream.getTracks().forEach(t => t.stop());
-      scanStream = null;
-    }
-    video.srcObject = null;
-    scanStatus.textContent = 'Camera stopped';
-    const ctx = scanOverlay.getContext('2d');
-    ctx.clearRect(0, 0, scanOverlay.width, scanOverlay.height);
+    if (state.raf) cancelAnimationFrame(state.raf); state.raf = 0;
+    state.stream?.getTracks().forEach(t => t.stop()); state.stream = null;
+    const video = $('video'); video.pause(); video.srcObject = null;
+    $('cameraBtn').textContent = 'Start camera';
+    const c = $('scanOverlay'); c.width = c.clientWidth; c.height = c.clientHeight; c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  }
+  $('cameraBtn').addEventListener('click', () => state.stream ? stopScan() : startScan());
+
+  function scanLoop() {
+    if (!state.stream) return;
+    state.raf = requestAnimationFrame(scanLoop);
+    const video = $('video');
+    if (video.readyState < 2 || !video.videoWidth) return;
+    const canvas = $('scanCanvas') || Object.assign(document.createElement('canvas'), { id: 'scanCanvas' });
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight; ctx.drawImage(video, 0, 0);
+    const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = window.jsQR?.(frame.data, frame.width, frame.height, { inversionAttempts: 'attemptBoth' });
+    const overlay = $('scanOverlay'); overlay.width = overlay.clientWidth; overlay.height = overlay.clientHeight; const ov = overlay.getContext('2d'); ov.clearRect(0,0,overlay.width,overlay.height);
+    if (!code?.location) return;
+    const pts = code.location; const sx = overlay.width / canvas.width, sy = overlay.height / canvas.height;
+    ov.beginPath(); ov.moveTo(pts.topLeftCorner.x*sx, pts.topLeftCorner.y*sy); ov.lineTo(pts.topRightCorner.x*sx,pts.topRightCorner.y*sy); ov.lineTo(pts.bottomRightCorner.x*sx,pts.bottomRightCorner.y*sy); ov.lineTo(pts.bottomLeftCorner.x*sx,pts.bottomLeftCorner.y*sy); ov.closePath(); ov.lineWidth=3; ov.strokeStyle='#fff'; ov.stroke();
+    if (code.data !== state.lastData) { state.lastData = code.data; renderResult('scan', code.data); $('scanStatus').textContent='QR code detected'; if (navigator.vibrate) navigator.vibrate(25); }
   }
 
-  function scanDecodeLoop() {
-    if (!scanStream) return;
-    scanFrameId = requestAnimationFrame(scanDecodeLoop);
-
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-      inversionAttempts: 'attemptBoth',
-    });
-
-    // overlay
-    const ov = scanOverlay.getContext('2d');
-    ov.clearRect(0, 0, scanOverlay.width, scanOverlay.height);
-    scanOverlay.width = scanOverlay.clientWidth;
-    scanOverlay.height = scanOverlay.clientHeight;
-
-    if (code && code.data) {
-      const pts = code.location.points;
-      ov.strokeStyle = '#0f0';
-      ov.lineWidth = 3;
-      ov.beginPath();
-      ov.moveTo(pts[0].x * (scanOverlay.width / canvas.width), pts[0].y * (scanOverlay.height / canvas.height));
-      for (let i = 1; i < pts.length; i++) {
-        ov.lineTo(pts[i].x * (scanOverlay.width / canvas.width), pts[i].y * (scanOverlay.height / canvas.height));
-      }
-      ov.closePath();
-      ov.stroke();
-
-      if (!scanDecodeTimer) {
-        scanDecodeTimer = setTimeout(() => {
-          scanDecodeTimer = null;
-          showScanResult(code.data);
-        }, 300);
-      }
-    } else {
-      if (scanDecodeTimer) {
-        clearTimeout(scanDecodeTimer);
-        scanDecodeTimer = null;
-      }
-      scanStatus.textContent = 'Scanning...';
-    }
-  }
-
-  function showScanResult(data) {
-    const parsed = parseQRData(data);
-    scanResult.classList.remove('hidden');
-    scanType.textContent = parsed.type;
-    scanIssuer.textContent = parsed.issuer || '-';
-    scanSeed.textContent = parsed.seed || parsed.raw;
-    scanSeed.style.color = '#0f0';
-    scanCopyBtn.dataset.copyText = parsed.seed || parsed.raw;
-    scanCopyBtn.disabled = false;
-    scanCopyBtn.textContent = 'Copy';
-    scanCopyStatus.textContent = '';
-    scanStatus.textContent = 'Decoded';
-    if (navigator.vibrate) navigator.vibrate(30);
-  }
-
-  window.addEventListener('beforeunload', () => {
-    stopScan();
+  $('clearBtn').addEventListener('click', () => {
+    $('uploadResult').classList.add('hidden'); $('scanResult').classList.add('hidden'); $('uploadStatus').textContent='Ready to decode'; state.lastData='';
+    $('browserFrame').src='about:blank'; $('browserFrame').style.display='none'; $('browserEmpty').style.display='flex';
   });
 
-  if (document.querySelector('#scan.active')) {
-    startScan();
+  const frame = $('browserFrame'), empty = $('browserEmpty'), urlInput = $('browserUrl');
+  function normalizeUrl(value) {
+    const v = value.trim(); if (!v) return '';
+    if (/^(https?|about):/i.test(v)) return v;
+    if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(v)) return 'https://' + v;
+    return 'https://www.google.com/search?q=' + encodeURIComponent(v);
   }
+  function navigate(value, push=true) {
+    const url = normalizeUrl(value); if (!url) return;
+    if (push) { state.history = state.history.slice(0, state.historyIndex + 1); state.history.push(url); state.historyIndex++; }
+    urlInput.value=url; frame.src=url; frame.style.display='block'; empty.style.display='none';
+  }
+  $('browserForm').addEventListener('submit', e => { e.preventDefault(); navigate(urlInput.value); });
+  $('browserReload').addEventListener('click', () => { if (frame.src && frame.src !== 'about:blank') frame.src = frame.src; });
+  $('browserBack').addEventListener('click', () => { if (state.historyIndex > 0) { state.historyIndex--; navigate(state.history[state.historyIndex], false); } });
+  $('browserForward').addEventListener('click', () => { if (state.historyIndex < state.history.length - 1) { state.historyIndex++; navigate(state.history[state.historyIndex], false); } });
+  frame.src='about:blank'; frame.style.display='none';
 })();
