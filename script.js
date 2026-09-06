@@ -1,5 +1,4 @@
 (function() {
-  // DOM refs
   const tabs = document.querySelectorAll('.tab-btn');
   const contents = {
     upload: document.getElementById('upload'),
@@ -27,7 +26,7 @@
 
   // Tab switching
   tabs.forEach(btn => {
-    btn.addEventListener('click', function(e) {
+    btn.addEventListener('click', function() {
       const tab = this.dataset.tab;
       if (tab === activeTab) return;
       tabs.forEach(b => b.classList.remove('active'));
@@ -41,8 +40,10 @@
     });
   });
 
-  // Upload: trigger file picker
-  uploadArea.addEventListener('click', () => fileInput.click());
+  // Upload
+  uploadArea.addEventListener('click', (e) => {
+    if (e.target.tagName !== 'INPUT') fileInput.click();
+  });
   fileInput.addEventListener('change', handleFile);
 
   function handleFile(e) {
@@ -54,7 +55,13 @@
       img.onload = function() {
         decodeQRFromImage(img);
       };
+      img.onerror = function() {
+        showUploadResult(null, 'Invalid image file.');
+      };
       img.src = ev.target.result;
+    };
+    reader.onerror = function() {
+      showUploadResult(null, 'Failed to read file.');
     };
     reader.readAsDataURL(file);
     fileInput.value = '';
@@ -63,25 +70,27 @@
   function decodeQRFromImage(img) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const size = 600;
+    const size = Math.min(img.width, img.height, 800);
     canvas.width = size;
     canvas.height = size;
-    ctx.drawImage(img, 0, 0, size, size);
+    const sx = (img.width - size) / 2;
+    const sy = (img.height - size) / 2;
+    ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
     const imageData = ctx.getImageData(0, 0, size, size);
     let code = jsQR(imageData.data, imageData.width, imageData.height, {
       inversionAttempts: 'dontInvert',
     });
     if (code && code.data) {
       showUploadResult(code.data);
+      return;
+    }
+    code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'attemptBoth',
+    });
+    if (code && code.data) {
+      showUploadResult(code.data);
     } else {
-      code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth',
-      });
-      if (code && code.data) {
-        showUploadResult(code.data);
-      } else {
-        showUploadResult(null, 'No QR code found in the image.');
-      }
+      showUploadResult(null, 'No QR code found in the image.');
     }
   }
 
@@ -91,6 +100,7 @@
       resultType.textContent = 'Error';
       resultIssuer.textContent = '-';
       resultSeed.textContent = error;
+      resultSeed.style.color = '#f55';
       return;
     }
     const parsed = parseQRData(data);
@@ -100,7 +110,6 @@
     resultSeed.style.color = parsed.seed ? '#0f0' : '#fff';
   }
 
-  // QR data parser
   function parseQRData(raw) {
     if (raw.startsWith('otpauth://')) {
       try {
@@ -108,7 +117,6 @@
         const path = url.pathname.slice(1);
         const parts = path.split(':');
         const issuerFromPath = parts.length > 1 ? parts[0] : '';
-        const account = parts.length > 1 ? parts[1] : parts[0];
         const secret = url.searchParams.get('secret') || '';
         const issuerFromParam = url.searchParams.get('issuer') || '';
         const issuer = issuerFromParam || issuerFromPath || 'Unknown';
@@ -151,7 +159,7 @@
       return {
         type: 'Contact',
         issuer: 'vCard',
-        seed: raw.substring(0, 80) + (raw.length > 80 ? '…' : ''),
+        seed: raw.substring(0, 80) + (raw.length > 80 ? '...' : ''),
         raw: raw
       };
     }
@@ -163,7 +171,7 @@
     };
   }
 
-  // Scan tab
+  // Scan
   async function startScan() {
     if (scanStream) return;
     try {
@@ -214,7 +222,6 @@
       inversionAttempts: 'attemptBoth',
     });
 
-    // overlay
     const ov = scanOverlay.getContext('2d');
     ov.clearRect(0, 0, scanOverlay.width, scanOverlay.height);
     scanOverlay.width = scanOverlay.clientWidth;
@@ -223,11 +230,13 @@
     if (code && code.data) {
       const pts = code.location.points;
       ov.strokeStyle = '#0f0';
-      ov.lineWidth = 3;
+      ov.lineWidth = 2;
       ov.beginPath();
-      ov.moveTo(pts[0].x * (scanOverlay.width / canvas.width), pts[0].y * (scanOverlay.height / canvas.height));
+      const scaleX = scanOverlay.width / canvas.width;
+      const scaleY = scanOverlay.height / canvas.height;
+      ov.moveTo(pts[0].x * scaleX, pts[0].y * scaleY);
       for (let i = 1; i < pts.length; i++) {
-        ov.lineTo(pts[i].x * (scanOverlay.width / canvas.width), pts[i].y * (scanOverlay.height / canvas.height));
+        ov.lineTo(pts[i].x * scaleX, pts[i].y * scaleY);
       }
       ov.closePath();
       ov.stroke();
@@ -236,7 +245,7 @@
         scanDecodeTimer = setTimeout(() => {
           scanDecodeTimer = null;
           showScanResult(code.data);
-        }, 300);
+        }, 250);
       }
     } else {
       if (scanDecodeTimer) {
