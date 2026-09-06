@@ -11,6 +11,8 @@
   const resultType = document.getElementById('resultType');
   const resultIssuer = document.getElementById('resultIssuer');
   const resultSeed = document.getElementById('resultSeed');
+  const resultCopyBtn = document.getElementById('resultCopyBtn');
+  const resultCopyStatus = document.getElementById('resultCopyStatus');
 
   const video = document.getElementById('video');
   const scanOverlay = document.getElementById('scanOverlay');
@@ -19,15 +21,17 @@
   const scanType = document.getElementById('scanType');
   const scanIssuer = document.getElementById('scanIssuer');
   const scanSeed = document.getElementById('scanSeed');
+  const scanCopyBtn = document.getElementById('scanCopyBtn');
+  const scanCopyStatus = document.getElementById('scanCopyStatus');
 
   let activeTab = 'upload';
   let scanStream = null;
   let scanFrameId = null;
   let scanDecodeTimer = null;
 
-  // Tab switching
+  // ---- Tab switching ----
   tabs.forEach(btn => {
-    btn.addEventListener('click', function(e) {
+    btn.addEventListener('click', function() {
       const tab = this.dataset.tab;
       if (tab === activeTab) return;
       tabs.forEach(b => b.classList.remove('active'));
@@ -41,40 +45,26 @@
     });
   });
 
-  // Upload: direct file input trigger - fixed
+  // ---- Upload ----
   uploadArea.addEventListener('click', function(e) {
-    // Don't trigger if click came from the file input itself
     if (e.target === fileInput) return;
     fileInput.click();
   });
-
-  // Also allow clicking the file input directly
-  fileInput.addEventListener('click', function(e) {
-    e.stopPropagation();
-  });
-
+  fileInput.addEventListener('click', e => e.stopPropagation());
   fileInput.addEventListener('change', handleFile);
 
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = function(ev) {
       const img = new Image();
-      img.onload = function() {
-        decodeQRFromImage(img);
-      };
-      img.onerror = function() {
-        showUploadResult(null, 'Failed to load image.');
-      };
+      img.onload = function() { decodeQRFromImage(img); };
+      img.onerror = function() { showUploadResult(null, 'Image load failed'); };
       img.src = ev.target.result;
     };
-    reader.onerror = function() {
-      showUploadResult(null, 'Failed to read file.');
-    };
+    reader.onerror = function() { showUploadResult(null, 'File read failed'); };
     reader.readAsDataURL(file);
-    // Reset so same file can be re-uploaded
     fileInput.value = '';
   }
 
@@ -86,35 +76,70 @@
     canvas.height = size;
     ctx.drawImage(img, 0, 0, size, size);
     const imageData = ctx.getImageData(0, 0, size, size);
-
-    let code = jsQR(imageData.data, imageData.width, imageData.height, {
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
       inversionAttempts: 'attemptBoth',
     });
-
     if (code && code.data) {
       showUploadResult(code.data);
     } else {
-      showUploadResult(null, 'No QR code found in the image.');
+      showUploadResult(null, 'No QR code found');
     }
   }
 
   function showUploadResult(data, error) {
     uploadResult.classList.remove('hidden');
+    // Reset copy button state
+    resultCopyBtn.disabled = false;
+    resultCopyBtn.textContent = 'Copy';
+    resultCopyStatus.textContent = '';
+
     if (error) {
       resultType.textContent = 'Error';
       resultIssuer.textContent = '-';
       resultSeed.textContent = error;
       resultSeed.style.color = '#ff4444';
+      resultCopyBtn.style.display = 'none';
       return;
     }
     const parsed = parseQRData(data);
     resultType.textContent = parsed.type;
     resultIssuer.textContent = parsed.issuer || '-';
     resultSeed.textContent = parsed.seed || parsed.raw;
-    resultSeed.style.color = parsed.seed ? '#0f0' : '#fff';
+    resultSeed.style.color = '#0f0';
+    resultCopyBtn.style.display = 'inline-block';
+    // Store seed for copy
+    resultCopyBtn.dataset.copyText = parsed.seed || parsed.raw;
   }
 
-  // QR data parser
+  // ---- Copy handler (one‑time) ----
+  function setupCopyButton(btn, statusEl) {
+    btn.addEventListener('click', function() {
+      if (this.disabled) return;
+      const text = this.dataset.copyText;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        this.disabled = true;
+        this.textContent = 'Copied';
+        statusEl.textContent = '';
+      }).catch(() => {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        this.disabled = true;
+        this.textContent = 'Copied';
+        statusEl.textContent = '';
+      });
+    });
+  }
+
+  setupCopyButton(resultCopyBtn, resultCopyStatus);
+  setupCopyButton(scanCopyBtn, scanCopyStatus);
+
+  // ---- QR data parser ----
   function parseQRData(raw) {
     if (raw.startsWith('otpauth://')) {
       try {
@@ -176,7 +201,7 @@
     };
   }
 
-  // Scan tab
+  // ---- Scan tab ----
   async function startScan() {
     if (scanStream) return;
     try {
@@ -187,6 +212,10 @@
       await video.play();
       scanStatus.textContent = 'Scanning...';
       scanResult.classList.add('hidden');
+      // Reset copy button
+      scanCopyBtn.disabled = false;
+      scanCopyBtn.textContent = 'Copy';
+      scanCopyStatus.textContent = '';
       scanDecodeLoop();
     } catch (err) {
       scanStatus.textContent = 'Camera unavailable: ' + err.message;
@@ -227,6 +256,7 @@
       inversionAttempts: 'attemptBoth',
     });
 
+    // overlay
     const ov = scanOverlay.getContext('2d');
     ov.clearRect(0, 0, scanOverlay.width, scanOverlay.height);
     scanOverlay.width = scanOverlay.clientWidth;
@@ -265,7 +295,11 @@
     scanType.textContent = parsed.type;
     scanIssuer.textContent = parsed.issuer || '-';
     scanSeed.textContent = parsed.seed || parsed.raw;
-    scanSeed.style.color = parsed.seed ? '#0f0' : '#fff';
+    scanSeed.style.color = '#0f0';
+    scanCopyBtn.dataset.copyText = parsed.seed || parsed.raw;
+    scanCopyBtn.disabled = false;
+    scanCopyBtn.textContent = 'Copy';
+    scanCopyStatus.textContent = '';
     scanStatus.textContent = 'Decoded';
     if (navigator.vibrate) navigator.vibrate(30);
   }
